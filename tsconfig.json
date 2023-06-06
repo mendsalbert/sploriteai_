@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    "target": "es5",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*", "./*"]
+    },
+    "noEmit": true,
+    "strict": false
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "src/api/auth/[...nextauth].ts",
+    "src/components/Payment/PaymentForm.js",
+    "src/components/Payment/PaymentModal.js",
+    "src/app/api/subscribe.js",
+    "pages/api/subscribe.js",
+    "pages/api/subscribe.js",
+    "src/app/course/[...title]",
+    "pages/api/callback.js"
+  ],
+  "exclude": ["node_modules"]
+}

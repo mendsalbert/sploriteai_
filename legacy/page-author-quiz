@@ -1,0 +1,696 @@
+'use client';
+import { Tab } from '@headlessui/react';
+import getCoursesHistory_ from '@/firebase/courses/getData';
+import addSearchHistory from '@/firebase/courses/addData';
+import ExperiencesCard from '@/components/ExperiencesCard';
+import Confetti from 'react-confetti';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import React, { FC, Fragment, useState, useEffect, useRef } from 'react';
+import ButtonSecondary from '@/shared/ButtonSecondary';
+import ModuleGridLargeScreen from '../(flight-listings)/ModuleGridLargeScreen';
+import { ArrowPathIcon, ArrowsPointingOutIcon, ExclamationCircleIcon, LightBulbIcon, PhotoIcon, SpeakerWaveIcon, VideoCameraIcon } from '@heroicons/react/24/outline';
+import { useUser } from '@auth0/nextjs-auth0/client';
+
+import { useDispatch, useSelector } from 'react-redux';
+import { detailedTopic, expandTopicAsync, generateExamples, generateQuizOnTopic } from '../reducersSlices/searchReducer';
+import { shuffleArray } from '@/utils/helpers';
+import ReactMarkdown from 'react-markdown';
+import ReactDom from 'react-dom';
+import rehypeRaw from 'rehype-raw';
+import { Loading } from '@nextui-org/react';
+import { createClient } from 'pexels';
+import axios from 'axios';
+import ButtonPrimary from '@/shared/ButtonPrimary';
+import { MemoizedReactMarkdown } from '@/components/Markdown/MemoizedReactMarkdown';
+//this is going to be added to a different file and later on imported here
+export interface AuthorPageProps {
+  decodedString: any;
+}
+
+interface Question {
+  question: string;
+  options: string[];
+  answer: string;
+}
+
+interface QuizState {
+  questions: Question[];
+  answers: string[];
+  showScore: boolean;
+  score: number;
+  wrongAnswers: Question[];
+}
+
+interface Props {
+  questions: Question[];
+}
+
+const AuthorPage: FC<AuthorPageProps> = ({ decodedString }) => {
+  const API_ENDPOINT = 'https://opentdb.com/api.php?amount=10&type=multiple';
+  const [questions, setQuestions] = useState([]);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [score, setScore] = useState(0);
+  const [showAnswers, setShowAnswers] = useState(false);
+
+  useEffect(() => {
+    async function fetchQuestions() {
+      const response = await axios.get(API_ENDPOINT);
+      const { results } = response.data;
+      const questions = results.map((question) => ({
+        ...question,
+        answers: shuffleArray([...question.incorrect_answers, question.correct_answer]),
+      }));
+      setQuestions(questions);
+    }
+
+    fetchQuestions();
+  }, []);
+
+  const handleAnswer = (answer) => {
+    if (!showAnswers) {
+      if (answer === questions[currentQuestion].correct_answer) {
+        setScore(score + 1);
+      }
+    }
+
+    setShowAnswers(true);
+  };
+
+  const handleNextQuestion = () => {
+    if (currentQuestion === 9) {
+      alert(`Your total score is ${score}/${questions.length}`);
+    } else {
+      setCurrentQuestion(currentQuestion + 1);
+      setShowAnswers(false);
+    }
+  };
+
+  const renderAnswers = () => {
+    return questions[currentQuestion].answers.map((answer, index) => (
+      <button
+        key={index}
+        className={`border-b-4 border-gray-400 bg-white py-2 px-4 font-bold text-gray-800 hover:border-gray-500 hover:bg-gray-100 ${
+          showAnswers && answer === questions[currentQuestion].correct_answer && 'border-green-500 bg-green-100'
+        } ${showAnswers && answer !== questions[currentQuestion].correct_answer && 'border-red-500 bg-red-100'}`}
+        disabled={showAnswers}
+        onClick={() => handleAnswer(answer)}
+      >
+        {answer}
+      </button>
+    ));
+  };
+
+  //redux states
+  const searchQuery = localStorage.getItem('searchQuery');
+  const quizResults = useSelector((state: any) => state?.search?.generatedQuiz?.slice(1)) || [];
+  const generatedQuizLoading = useSelector((state: any) => state?.search?.generatedQuizLoading) || false;
+  console.log('quizResults', quizResults);
+  const dispatch = useDispatch<any>();
+  const isLoading = useSelector((state: any) => state.search.isExpandLoading);
+  // const searchResults = useSelector((state: any) => state.search.topics) || [];
+  const { user } = useUser();
+  // const [searchResults, setSearchResults] = useState([]);
+  // const reduxSearchResults = useSelector((state: any) => state.search.topics) || [];
+
+  // useEffect(() => {
+  //   const localStorageData = localStorage.getItem('searchData');
+
+  //   if (localStorageData) {
+  //     const parsedData = JSON.parse(localStorageData);
+
+  //     if (parsedData.query === searchQuery) {
+  //       // Data is present in local storage and matches the current query, update the state
+  //       setSearchResults(parsedData.results);
+  //     } else {
+  //       // Data in local storage doesn't match the current query, fetch new data and store it
+  //       const newData = {
+  //         query: searchQuery,
+  //         results: reduxSearchResults,
+  //       };
+  //       localStorage.setItem('searchData', JSON.stringify(newData));
+  //       setSearchResults(reduxSearchResults);
+  //     }
+  //   } else {
+  //     // Data is not present in local storage, fetch it and store it
+  //     const newData = {
+  //       query: searchQuery,
+  //       results: reduxSearchResults,
+  //     };
+  //     localStorage.setItem('searchData', JSON.stringify(newData));
+  //     setSearchResults(reduxSearchResults);
+  //   }
+  // }, [reduxSearchResults, searchQuery]);
+
+  const [searchResults, setSearchResults] = useState([]);
+  const reduxSearchResults = useSelector((state: any) => state.search.topics) || [];
+
+  useEffect(() => {
+    const fetchDataFromFirebase = async () => {
+      const firebaseData = await getCoursesHistory_(user?.sub);
+      const foundData = Object.values(firebaseData).find((item: any) => {
+        if (typeof item === 'object' && item.hasOwnProperty('query')) {
+          return item.query === searchQuery;
+        }
+        return false;
+      });
+
+      console.log('fbresults', foundData.results);
+      // console.log('reduxSearchResults', reduxSearchResults);
+
+      if (firebaseData && foundData?.query === searchQuery) {
+        // Data is present in Firebase and matches the current query, update the state
+        setSearchResults(foundData?.results);
+      } else {
+        // Data in Firebase doesn't match the current query or is not present, fetch new data and store it
+        const newData = {
+          query: searchQuery,
+          results: reduxSearchResults,
+        };
+        await addSearchHistory(user?.sub, newData);
+        // setFirebaseData('searchData', newData);
+
+        setSearchResults(reduxSearchResults);
+      }
+    };
+
+    fetchDataFromFirebase();
+  }, [reduxSearchResults, searchQuery, user]);
+
+  // Your component logic...
+
+  const expandedResults = useSelector((state: any) => state.search.detailedTopic) || '';
+  const loadingResults = useSelector((state: any) => state.search.isDetailedLoading);
+  const generatedExamples = useSelector((state: any) => state.search.generatedExamples) || '';
+  const generatedExamplesLoading = useSelector((state: any) => state.search.generatedExamplesLoading) || '';
+
+  //application state
+  let [categories] = useState([
+    {
+      name: 'Explanation',
+      icon: <ArrowsPointingOutIcon className='mr-1 h-5 w-5' />,
+    },
+    { name: 'Video', icon: <VideoCameraIcon className='mr-1 h-5 w-5' /> },
+    // { name: "Audio", icon: <SpeakerWaveIcon className="h-5 w-5 mr-1" /> },
+    { name: 'Images', icon: <PhotoIcon className='mr-1 h-5 w-5' /> },
+    { name: 'Quiz', icon: <LightBulbIcon className='mr-1 h-5 w-5' /> },
+    {
+      name: 'Examples',
+      icon: <ExclamationCircleIcon className='mr-1 h-5 w-5' />,
+    },
+  ]);
+
+  const [title, settitle] = useState(searchResults[0]?.title) as any;
+  const [content, setcontent] = useState(searchResults[0]?.content);
+  const [quizclicked, setquizclicked] = useState(false);
+  const [isRunning, setIsRunning] = useState(true);
+
+  const [quizState, setQuizState] = useState<QuizState>({
+    questions: quizResults.slice(1),
+    answers: Array(quizResults?.length).fill(''),
+    showScore: false,
+    score: 0,
+    wrongAnswers: [],
+  });
+
+  //loading states
+  const [searchloading, setsearchloading] = useState(false);
+  const [videoloading, setvideoloading] = useState(false);
+  const [quizloading, setquizloading] = useState(true);
+
+  //use Effects
+  useEffect(() => {
+    setTimeout(() => {
+      setIsRunning(false);
+    }, 4000);
+  }, [quizState.score]);
+
+  useEffect(() => {
+    console.log('this component is called');
+
+    const searchQuery = localStorage.getItem('searchQuery');
+    // dispatch(detailedTopic(title, searchQuery));
+    dispatch(detailedTopic({ title, query: searchQuery } as any));
+  }, [generatedQuizLoading]);
+
+  useEffect(() => {
+    setQuizState({
+      ...quizState,
+      questions: quizResults,
+      answers: Array(quizResults.length).fill(''),
+    });
+  }, [generatedQuizLoading]);
+
+  //videos and images state
+  const [images, setImages] = useState([]) as any;
+  const [videos, setvideos] = useState([]) as any;
+
+  //functions
+  //quiz functions
+  const handleOptionClick = (questionIndex: number, selectedOption: string) => {
+    const newAnswers = [...quizState.answers];
+    newAnswers[questionIndex] = selectedOption;
+    setQuizState({ ...quizState, answers: newAnswers });
+  };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    let score = 0;
+    const wrongAnswers: Question[] = [];
+
+    quizState.questions.forEach((question: any, index) => {
+      const correctAnswer = question.answer;
+      const userAnswer = quizState.answers[index];
+
+      // Check for a partial match between the user's answer and the correct answer
+      console.log(userAnswer);
+      console.log(correctAnswer);
+      // (quizState.answers[index] === question.answer
+      const partialMatch = correctAnswer?.toLowerCase().includes(userAnswer?.toLowerCase());
+
+      if (partialMatch) {
+        score++;
+      } else {
+        wrongAnswers.push(question);
+      }
+    });
+
+    setQuizState({
+      ...quizState,
+      showScore: true,
+      score: score,
+      wrongAnswers: wrongAnswers,
+    });
+  };
+
+  const renderQuiz = () => {
+    return (
+      <div className='quiz-container'>
+        {!quizState.showScore && (
+          <form onSubmit={handleSubmit}>
+            {quizState.questions.map((question, index) => (
+              <div
+                key={question.question}
+                className='my-2 flex w-full  flex-col space-y-6 rounded-full border-neutral-200 px-2 dark:border-neutral-700 sm:space-y-7 sm:rounded-2xl sm:border sm:p-2 xl:p-2'
+              >
+                <p className='question-text'>{`Q${index + 1} ${question.question}`}</p>
+                <div className='options-container'>
+                  {question.options.map((option, optionIndex) => (
+                    <div key={option} className=''>
+                      <label>
+                        <input type='radio' name={`question${index}`} className='mr-2' value={option} onChange={() => handleOptionClick(index, option)} checked={quizState.answers[index] === option} />
+                        {`${optionIndex + 1}. ${option}`}
+                        {/* {` ${option}`} */}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {/* <button type="submit" className="submit-button">
+              Show Results
+            </button> */}
+            <ButtonPrimary type='submit'> Show Results</ButtonPrimary>
+          </form>
+        )}
+        {quizState.showScore && renderScore()}
+      </div>
+    );
+  };
+
+  const renderScore = () => {
+    const percentageScore = (quizState.score / quizState.questions.length) * 100;
+    let passed = percentageScore >= 80;
+    console.log(passed);
+    console.log(isRunning);
+
+    return (
+      <div className='my-2 flex w-full   flex-col space-y-6 rounded-full border-neutral-200 px-2 dark:border-neutral-700 sm:space-y-7 sm:rounded-2xl sm:border sm:p-2 xl:p-2'>
+        <p className='score-text px-2 pt-2'>
+          You scored {quizState.score} out of {quizState.questions.length}.
+        </p>
+        <div>
+          {quizState.wrongAnswers.map((question) => (
+            <div className='py-2'>
+              <p className='wrong-answer' key={question.question}>
+                Question: {question.question}
+              </p>
+              <p> Answer: {question.answer}</p>
+            </div>
+          ))}
+        </div>
+        {passed ? <Confetti /> : ''}{' '}
+      </div>
+    );
+  };
+
+  //tabs functions
+  const onChangeTopic = (title: any) => {
+    const searchQuery = localStorage.getItem('searchQuery');
+    settitle(title);
+    dispatch(detailedTopic({ title, query: searchQuery } as any));
+  };
+
+  const search = () => {
+    setsearchloading(true);
+    const client = createClient('cFTvfmCHfyjrF7wRD6TEOcFgm5oLxkzca6fBZwoV94SLoXd3s7h5sZxP');
+    const query = `${searchQuery} ${title}`;
+
+    client.photos.search({ query, per_page: 5 }).then((photos: any) => {
+      setImages(photos?.photos);
+      setsearchloading(false);
+      console.log(photos);
+    });
+  };
+
+  function addParagraphs(str: string): string {
+    const paragraphs = str
+      .split('\n\n')
+      .map((p) => `<p>${p}</p>`)
+      .join('');
+    return paragraphs;
+  }
+
+  const handleSearch = async () => {
+    try {
+      setvideoloading(true);
+      // Search for videos on YouTube
+      const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+        params: {
+          part: 'snippet',
+          q: `${searchQuery} ${title}`,
+          type: 'video',
+          maxResults: 5,
+          key: 'AIzaSyBsKxUZTofIZgRIvb7bOfTNjM-lbbEUyHo',
+        },
+      });
+
+      const videos = response.data.items;
+      setvideos(videos);
+      setvideoloading(false);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const generateQuiz = () => {
+    dispatch(generateQuizOnTopic({ title, query: searchQuery } as any));
+  };
+
+  const generateExample = () => {
+    const searchQuery = localStorage.getItem('searchQuery');
+    console.log(title);
+
+    dispatch(generateExamples({ title, query: searchQuery } as any));
+  };
+
+  console.log(generatedExamples);
+
+  const renderSidebar = () => {
+    return (
+      <div className=' flex w-full flex-col items-center space-y-6 rounded-full border-neutral-200 px-0 text-center dark:border-neutral-700 sm:space-y-7 sm:rounded-2xl sm:border sm:p-2 xl:p-2'>
+        {/* <h2 className="text-2xl pt-2 text-left font-semibold">{searchQuery}</h2> */}
+        <ModuleGridLargeScreen
+          results={searchResults}
+          isLoading={isLoading}
+          setnext={(title: any) => {
+            onChangeTopic(title);
+            // search();
+            // search(title);
+          }}
+        />
+      </div>
+    );
+  };
+
+  const renderSection1 = () => {
+    return (
+      <div className='listingSection__wrap'>
+        <div>
+          <h2 className='text-2xl font-semibold'>{searchQuery}</h2>
+          <span className='mt-2 block text-neutral-500 dark:text-neutral-400'>{title}</span>
+        </div>
+        <div className='w-14 border-b border-neutral-200 dark:border-neutral-700'></div>
+
+        <div>
+          <Tab.Group>
+            <Tab.List className='flex space-x-1 overflow-x-auto'>
+              {categories.map((item) => (
+                <Tab key={item.name} as={Fragment}>
+                  {({ selected }) => (
+                    <button
+                      onClick={() => {
+                        if (item.name === 'Video') {
+                          handleSearch();
+                        } else if (item.name === 'Images') {
+                          search();
+                        } else if (item.name === 'Quiz') {
+                          generateQuiz();
+                          settitle(title);
+                          setquizclicked(!quizclicked);
+                        } else if (item.name === 'Examples') {
+                          generateExample();
+                        }
+                      }}
+                      className={`block flex-shrink-0 rounded-full px-5 py-2.5 text-sm font-medium capitalize !leading-none focus:outline-none sm:px-6 sm:py-3 sm:text-base ${
+                        selected
+                          ? 'flex flex-row items-center bg-secondary-900 text-secondary-50 '
+                          : 'flex flex-row items-center  text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100'
+                      } `}
+                    >
+                      {item.icon}
+                      {item.name}
+                    </button>
+                  )}
+                </Tab>
+              ))}
+            </Tab.List>
+            <Tab.Panels>
+              <Tab.Panel className=''>
+                <div className='flex flex-grow flex-col'>
+                  <div className='mb-4 space-y-5'>
+                    <div>
+                      <div className='hidden sm:mt-2 sm:block'>
+                        <span className='text-base text-neutral-500 dark:text-neutral-400 '>
+                          {loadingResults ? (
+                            <div className='m-auto w-full text-center'>
+                              <Loading type='spinner' color='default' size='lg' />
+                            </div>
+                          ) : (
+                            <>
+                              {/* <ReactMarkdown remarkPlugins={[[remarkGfm, { singleTilde: false }]]} rehypePlugins={[rehypeRaw]}>
+                                {addParagraphs(expandedResults)}
+                              </ReactMarkdown> */}
+
+                              <MemoizedReactMarkdown
+                                className='prose mb-7  dark:prose-invert sm:mb-0'
+                                remarkPlugins={[remarkGfm, remarkMath]}
+                                // rehypePlugins={[rehypeMathjax]}
+                                components={{
+                                  code({ node, inline, className, children, ...props }) {
+                                    const match = /language-(\w+)/.exec(className || '');
+
+                                    return !inline && match ? (
+                                      <CodeBlock key={Math.random()} language={match[1]} value={String(children).replace(/\n$/, '')} {...props} />
+                                    ) : (
+                                      <code className={className} {...props}>
+                                        {children}
+                                      </code>
+                                    );
+                                  },
+                                  table({ children }) {
+                                    return <table className='border-collapse border border-black py-1 px-3 dark:border-white'>{children}</table>;
+                                  },
+                                  th({ children }) {
+                                    return <th className='break-words border border-black bg-gray-500 py-1 px-3 text-white dark:border-white'>{children}</th>;
+                                  },
+                                  td({ children }) {
+                                    return <td className='break-words border border-black py-1 px-3 dark:border-white'>{children}</td>;
+                                  },
+                                }}
+                              >
+                                {expandedResults}
+                              </MemoizedReactMarkdown>
+                              <p
+                                onClick={() => {
+                                  onChangeTopic(title);
+                                }}
+                                className='pt-4'
+                              >
+                                {expandedResults?.length ? <ArrowPathIcon className='h-7 w-7' /> : ''}
+                              </p>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Tab.Panel>
+              <Tab.Panel className=''>
+                <div className='mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 md:gap-7'></div>
+
+                {videoloading ? (
+                  <div className='m-auto w-full text-center'>
+                    <Loading type='spinner' color='default' size='lg' />
+                  </div>
+                ) : (
+                  <div className='mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 md:gap-7'>
+                    {videos?.map((videos: any, index: any) => (
+                      <ExperiencesCard key={index} data={videos} />
+                    ))}
+                  </div>
+                )}
+              </Tab.Panel>
+              <Tab.Panel className=''>
+                {searchloading ? (
+                  <div className='m-auto w-full text-center'>
+                    <Loading type='spinner' color='default' size='lg' />
+                  </div>
+                ) : (
+                  <div className='mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 md:gap-7'>
+                    {images?.map((items: any, index: any) => (
+                      <img src={items.src.landscape} width={400} height={400} className='rounded-2xl' />
+                    ))}
+                  </div>
+                )}
+                <div className='mt-11 flex items-center justify-center'>
+                  <ButtonSecondary>Show me more</ButtonSecondary>
+                </div>
+              </Tab.Panel>
+              <Tab.Panel className=''>
+                {quizResults.length < 1 ? (
+                  <div className='m-auto w-full text-center'>
+                    <Loading type='spinner' color='default' size='lg' />
+                  </div>
+                ) : (
+                  <div className='mt-8 grid grid-cols-1 gap-6 sm:grid-cols-1 md:gap-7'>
+                    {
+                      <MemoizedReactMarkdown
+                        className='prose mb-7  dark:prose-invert sm:mb-0'
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        // rehypePlugins={[rehypeMathjax]}
+                        components={{
+                          code({ node, inline, className, children, ...props }) {
+                            const match = /language-(\w+)/.exec(className || '');
+
+                            return !inline && match ? (
+                              <CodeBlock key={Math.random()} language={match[1]} value={String(children).replace(/\n$/, '')} {...props} />
+                            ) : (
+                              <code className={className} {...props}>
+                                {children}
+                              </code>
+                            );
+                          },
+                          table({ children }) {
+                            return <table className='border-collapse border border-black py-1 px-3 dark:border-white'>{children}</table>;
+                          },
+                          th({ children }) {
+                            return <th className='break-words border border-black bg-gray-500 py-1 px-3 text-white dark:border-white'>{children}</th>;
+                          },
+                          td({ children }) {
+                            return <td className='break-words border border-black py-1 px-3 dark:border-white'>{children}</td>;
+                          },
+                        }}
+                      >
+                        {renderQuiz()}
+                      </MemoizedReactMarkdown>
+                    }
+                  </div>
+                )}
+
+                {/* <div className='container mx-auto'>
+                  {questions.length > 0 ? (
+                    <div>
+                      <div className='flex items-center py-4'>
+                        <h1 className='text-xl '>{questions[currentQuestion].question}</h1>
+                      </div>
+                      <div className='mb-4 flex flex-wrap'>{renderAnswers()}</div>
+                      <div className='flex items-center justify-between py-4'>
+                        {showAnswers && (
+                          <button className='rounded bg-blue-500 py-2 px-4 font-bold text-white hover:bg-blue-700' onClick={handleNextQuestion}>
+                            {currentQuestion === 9 ? 'Show Score' : 'Next Question'}
+                          </button>
+                        )}
+                        <p className='text-lg font-bold text-gray-800 dark:text-white'>
+                          Score: {score}/{questions.length}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p>Loading...</p>
+                  )}
+                </div> */}
+                <div className='mt-11 flex items-center justify-center'>
+                  <ButtonSecondary
+                    onClick={() => {
+                      generateQuiz();
+                    }}
+                  >
+                    <ArrowPathIcon className='h-6 w-6' />
+                  </ButtonSecondary>
+                </div>
+              </Tab.Panel>
+              <Tab.Panel className=''>
+                <div className='mt-8 grid grid-cols-1 gap-6 sm:grid-cols-1 md:gap-7'>
+                  <MemoizedReactMarkdown
+                    className='prose mb-7  dark:prose-invert sm:mb-0'
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    // rehypePlugins={[rehypeMathjax]}
+                    components={{
+                      code({ node, inline, className, children, ...props }) {
+                        const match = /language-(\w+)/.exec(className || '');
+
+                        return !inline && match ? (
+                          <CodeBlock key={Math.random()} language={match[1]} value={String(children).replace(/\n$/, '')} {...props} />
+                        ) : (
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        );
+                      },
+                      table({ children }) {
+                        return <table className='border-collapse border border-black py-1 px-3 dark:border-white'>{children}</table>;
+                      },
+                      th({ children }) {
+                        return <th className='break-words border border-black bg-gray-500 py-1 px-3 text-white dark:border-white'>{children}</th>;
+                      },
+                      td({ children }) {
+                        return <td className='break-words border border-black py-1 px-3 dark:border-white'>{children}</td>;
+                      },
+                    }}
+                  >
+                    {generatedExamples}
+                  </MemoizedReactMarkdown>
+                </div>
+                <div className='mt-11 flex items-center justify-center'>
+                  <ButtonSecondary
+                    onClick={() => {
+                      // generateQuiz();
+                    }}
+                  >
+                    <ArrowPathIcon className='h-6 w-6' />
+                  </ButtonSecondary>
+                </div>
+              </Tab.Panel>
+            </Tab.Panels>
+          </Tab.Group>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className={`nc-AuthorPage `}>
+      <main className='container mt-12 mb-24 flex flex-col lg:mb-32 lg:flex-row'>
+        <div className='mb-24 block flex-grow lg:mb-0'>
+          <div className='lg:sticky lg:top-24'>{renderSidebar()}</div>
+        </div>
+        <div className='w-full flex-shrink-0 space-y-8 lg:w-3/5 lg:space-y-10 lg:pl-10 xl:w-2/3'>{renderSection1()}</div>
+      </main>
+    </div>
+  );
+};
+
+export default AuthorPage;

@@ -1,0 +1,85 @@
+"use client";
+
+import { BookOpenIcon, Square3Stack3DIcon } from "@heroicons/react/24/outline";
+import Image from "next/image";
+import { title } from "process";
+import React, { FC, useState } from "react";
+
+export interface FlightCardProps {
+  className?: string;
+  data: {
+    title: string;
+    content: string;
+  };
+  setnext: any;
+}
+
+const ModuleCardsLarge: FC<FlightCardProps> = ({
+  className = "",
+  data,
+  setnext,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div
+      className={`nc-FlightCardgroup p-4 sm:p-6 relative bg-white dark:bg-neutral-900 border border-neutral-100
+     dark:border-neutral-800 rounded-2xl overflow-hidden hover:shadow-lg transition-shadow space-y-6 ${className}`}
+    >
+      <div className={` sm:pr-20 relative  ${className}`}>
+        {/*  eslint-disable-next-line jsx-a11y/anchor-has-content */}
+        <a href="##" className="absolute inset-0" />
+
+        <span
+          className={`absolute right-0 bottom-0 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 w-10 h-10 bg-neutral-50 dark:bg-neutral-800 rounded-full flex items-center justify-center cursor-pointer ${
+            isOpen ? "transform -rotate-360 bg-green-400 dark:bg-green-400" : ""
+          }`}
+          onClick={() => {
+            setnext(data.title);
+            setIsOpen(!isOpen);
+          }}
+        >
+          <i className="text-xl las la-angle-right"></i>
+        </span>
+
+        <div className="flex flex-col sm:flex-row sm:items-center space-y-6 sm:space-y-0">
+          {/* LOGO IMG */}
+          <div className=" flex-shrink-0">
+            {/* <Image
+              src={data.airlines.logo}
+              width={40}
+              height={40}
+              className="w-10"
+              alt="air-logo"
+              sizes="40px"
+            /> */}
+            <BookOpenIcon className="h-7 w-7" />
+          </div>
+
+          {/* FOR MOBILE RESPONSIVE */}
+
+          {/* TIME - NAME */}
+          <div className="hidden lg:block  min-w-[300px] flex-[0] ">
+            <div className="font-medium pl-2 text-left text-lg w-full">
+              {data.title}
+            </div>
+          </div>
+
+          {/* PRICE */}
+          {/* <div className="flex-[4] whitespace-nowrap sm:text-right">
+            <div>
+              <span className="text-sm font-semibold text-secondary-6000">
+                2 mins Read
+              </span>
+            </div>
+          </div> */}
+        </div>
+      </div>
+
+      {/* DETAIL */}
+      {/* {renderDetail()} */}
+    </div>
+  );
+};
+
+export default ModuleCardsLarge;

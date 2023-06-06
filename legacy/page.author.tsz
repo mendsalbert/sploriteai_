@@ -1,0 +1,584 @@
+"use client";
+import { Tab } from "@headlessui/react";
+import CarCard from "@/components/CarCard";
+import CommentListing from "@/components/CommentListing";
+import ExperiencesCard from "@/components/ExperiencesCard";
+import Confetti from "react-confetti";
+import StartRating from "@/components/StartRating";
+import StayCard from "@/components/StayCard2";
+import {
+  DEMO_CAR_LISTINGS,
+  DEMO_EXPERIENCES_LISTINGS,
+  DEMO_STAY_LISTINGS,
+} from "@/data/listings";
+import React, { FC, Fragment, useState, useEffect, useRef } from "react";
+import Avatar from "@/shared/Avatar";
+import ButtonSecondary from "@/shared/ButtonSecondary";
+import SocialsList from "@/shared/SocialsList";
+import ModuleGridLargeScreen from "../(flight-listings)/ModuleGridLargeScreen";
+import {
+  ArrowPathIcon,
+  ArrowsPointingOutIcon,
+  ExclamationCircleIcon,
+  LightBulbIcon,
+  PhotoIcon,
+  SpeakerWaveIcon,
+  VideoCameraIcon,
+} from "@heroicons/react/24/outline";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  detailedTopic,
+  expandTopicAsync,
+  generateExamples,
+  generateQuizOnTopic,
+} from "../reducersSlices/searchReducer";
+import ReactMarkdown from "react-markdown";
+import ReactDom from "react-dom";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import { Loading } from "@nextui-org/react";
+import { createClient } from "pexels";
+import axios from "axios";
+import ButtonPrimary from "@/shared/ButtonPrimary";
+export interface AuthorPageProps {
+  decodedString: any;
+}
+
+interface Question {
+  question: string;
+  options: string[];
+  answer: string;
+}
+
+interface QuizState {
+  questions: Question[];
+  answers: string[];
+  showScore: boolean;
+  score: number;
+  wrongAnswers: Question[];
+}
+
+interface Props {
+  questions: Question[];
+}
+
+// Define the quiz questions
+// const questions: Question[] = [
+//   {
+//     question: "What is the most basic type of motion?",
+//     options: [
+//       "Linear motion",
+//       "Rotational motion",
+//       "Oscillatory motion",
+//       "Circular motion",
+//     ],
+//     answer: "Linear motion",
+//   },
+//   {
+//     question: "What is the force that opposes the motion of objects?",
+//     options: ["Friction", "Gravity", "Inertia", "None of the above"],
+//     answer: "Friction",
+//   },
+//   {
+//     question: "What is the SI unit of speed?",
+//     options: [
+//       "Meters per second",
+//       "Kilometers per hour",
+//       "Miles per hour",
+//       "Feet per second",
+//     ],
+//     answer: "Meters per second",
+//   },
+//   {
+//     question:
+//       "What is the acceleration of an object if its velocity is doubled?",
+//     options: [
+//       "The acceleration is doubled.",
+//       "The acceleration is halved.",
+//       "The acceleration is unchanged.",
+//       "The acceleration is zero.",
+//     ],
+//     answer: "The acceleration is halved.",
+//   },
+//   {
+//     question: "What is the relationship between force and acceleration?",
+//     options: [
+//       "Force is proportional to acceleration.",
+//       "Force is inversely proportional to acceleration.",
+//       "Force is independent of acceleration.",
+//       "There is no relationship between force and acceleration.",
+//     ],
+//     answer: "Force is proportional to acceleration.",
+//   },
+// ];
+
+const AuthorPage: FC<AuthorPageProps> = ({ decodedString }) => {
+  // Define an interface for the quiz state
+  // const [showConfetti, setShowConfetti] = useState(false);
+
+  const quizResults =
+    useSelector((state: any) => state?.search?.generatedQuiz?.slice(1)) || [];
+  const generatedQuizLoading =
+    useSelector((state: any) => state?.search?.generatedQuizLoading) || false;
+  console.log("quizResults", quizResults);
+
+  const [quizState, setQuizState] = useState<QuizState>({
+    questions: quizResults.slice(1),
+    answers: Array(quizResults?.length).fill(""),
+    showScore: false,
+    score: 0,
+    wrongAnswers: [],
+  });
+
+  const [isRunning, setIsRunning] = useState(true);
+
+  // Stop the confetti after 4 seconds
+  useEffect(() => {
+    setTimeout(() => {
+      setIsRunning(false);
+    }, 4000);
+  }, [quizState.score]);
+
+  const handleOptionClick = (questionIndex: number, selectedOption: string) => {
+    const newAnswers = [...quizState.answers];
+    newAnswers[questionIndex] = selectedOption;
+    setQuizState({ ...quizState, answers: newAnswers });
+  };
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    let score = 0;
+    const wrongAnswers: Question[] = [];
+
+    quizState.questions.forEach((question: any, index) => {
+      const correctAnswer = question.answer;
+      const userAnswer = quizState.answers[index];
+
+      // Check for a partial match between the user's answer and the correct answer
+      console.log(userAnswer);
+      console.log(correctAnswer);
+      // (quizState.answers[index] === question.answer
+      const partialMatch = correctAnswer
+        ?.toLowerCase()
+        .includes(userAnswer?.toLowerCase());
+
+      if (partialMatch) {
+        score++;
+      } else {
+        wrongAnswers.push(question);
+      }
+    });
+
+    setQuizState({
+      ...quizState,
+      showScore: true,
+      score: score,
+      wrongAnswers: wrongAnswers,
+    });
+  };
+
+  const renderQuiz = () => {
+    return (
+      <div className="quiz-container">
+        {!quizState.showScore && (
+          <form onSubmit={handleSubmit}>
+            {quizState.questions.map((question, index) => (
+              <div
+                key={question.question}
+                className="w-full flex flex-col  sm:rounded-2xl sm:border border-neutral-200 rounded-full dark:border-neutral-700 space-y-6 sm:space-y-7 px-2 my-2 sm:p-2 xl:p-2"
+              >
+                <p className="question-text">{`Q${index + 1} ${
+                  question.question
+                }`}</p>
+                <div className="options-container">
+                  {question.options.map((option, optionIndex) => (
+                    <div key={option} className="">
+                      <label>
+                        <input
+                          type="radio"
+                          name={`question${index}`}
+                          className="mr-2"
+                          value={option}
+                          onChange={() => handleOptionClick(index, option)}
+                          checked={quizState.answers[index] === option}
+                        />
+                        {`${optionIndex + 1}. ${option}`}
+                        {/* {` ${option}`} */}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {/* <button type="submit" className="submit-button">
+              Show Results
+            </button> */}
+            <ButtonPrimary type="submit"> Show Results</ButtonPrimary>
+          </form>
+        )}
+        {quizState.showScore && renderScore()}
+      </div>
+    );
+  };
+
+  const renderScore = () => {
+    // const [showConfetti, setShowConfetti] = useState(false);
+    const percentageScore =
+      (quizState.score / quizState.questions.length) * 100;
+    let passed = percentageScore >= 80;
+    console.log(passed);
+    console.log(isRunning);
+
+    return (
+      <div className="w-full flex flex-col   sm:rounded-2xl sm:border border-neutral-200 rounded-full dark:border-neutral-700 space-y-6 sm:space-y-7 px-2 my-2 sm:p-2 xl:p-2">
+        <p className="score-text pt-2 px-2">
+          You scored {quizState.score} out of {quizState.questions.length}.
+        </p>
+        <div>
+          {quizState.wrongAnswers.map((question) => (
+            <div className="py-2">
+              <p className="wrong-answer" key={question.question}>
+                Question: {question.question}
+              </p>
+              <p> Answer: {question.answer}</p>
+            </div>
+          ))}
+        </div>
+        {passed ? <Confetti /> : ""}{" "}
+      </div>
+    );
+  };
+
+  //end
+  let [categories] = useState([
+    {
+      name: "Explanation",
+      icon: <ArrowsPointingOutIcon className="h-5 w-5 mr-1" />,
+    },
+    { name: "Video", icon: <VideoCameraIcon className="h-5 w-5 mr-1" /> },
+    // { name: "Audio", icon: <SpeakerWaveIcon className="h-5 w-5 mr-1" /> },
+    { name: "Images", icon: <PhotoIcon className="h-5 w-5 mr-1" /> },
+    { name: "Quiz", icon: <LightBulbIcon className="h-5 w-5 mr-1" /> },
+
+    {
+      name: "Examples",
+      icon: <ExclamationCircleIcon className="h-5 w-5 mr-1" />,
+    },
+  ]);
+
+  const dispatch = useDispatch<any>();
+  const isLoading = useSelector((state: any) => state.search.isExpandLoading);
+  const searchResults = useSelector((state: any) => state.search.topics) || [];
+
+  const expandedResults =
+    useSelector((state: any) => state.search.detailedTopic) || "";
+
+  const loadingResults = useSelector(
+    (state: any) => state.search.isDetailedLoading
+  );
+
+  //
+  const generatedExamples =
+    useSelector((state: any) => state.search.generatedExamples) || "";
+
+  const generatedExamplesLoading =
+    useSelector((state: any) => state.search.generatedExamplesLoading) || "";
+
+  const searchQuery = localStorage.getItem("searchQuery");
+  const [searchloading, setsearchloading] = useState(false);
+  const [videoloading, setvideoloading] = useState(false);
+  const [quizloading, setquizloading] = useState(true);
+  const [title, settitle] = useState(searchResults[0]?.title) as any;
+  const [content, setcontent] = useState(searchResults[0]?.content);
+  const [quizclicked, setquizclicked] = useState(false);
+  const onChangeTopic = (title: any) => {
+    const searchQuery = localStorage.getItem("searchQuery");
+    settitle(title);
+    dispatch(detailedTopic(title, searchQuery));
+  };
+  console.log("expandedResults", expandedResults);
+
+  // useEffect(() => {
+  //   console.log("this component is called");
+
+  //   const searchQuery = localStorage.getItem("searchQuery");
+  //   dispatch(detailedTopic(title, searchQuery));
+  // }, []);
+
+  const [images, setImages] = useState([]) as any;
+  const [videos, setvideos] = useState([]) as any;
+
+  const search = () => {
+    setsearchloading(true);
+    const client = createClient(
+      "cFTvfmCHfyjrF7wRD6TEOcFgm5oLxkzca6fBZwoV94SLoXd3s7h5sZxP"
+    );
+    const query = `${searchQuery} ${title}`;
+
+    client.photos.search({ query, per_page: 5 }).then((photos: any) => {
+      setImages(photos?.photos);
+      setsearchloading(false);
+      console.log(photos);
+    });
+  };
+
+  const handleSearch = async () => {
+    try {
+      setvideoloading(true);
+      // Search for videos on YouTube
+      const response = await axios.get(
+        "https://www.googleapis.com/youtube/v3/search",
+        {
+          params: {
+            part: "snippet",
+            q: `${searchQuery} ${title}`,
+            type: "video",
+            maxResults: 5,
+            key: "AIzaSyBsKxUZTofIZgRIvb7bOfTNjM-lbbEUyHo",
+          },
+        }
+      );
+
+      const videos = response.data.items;
+      setvideos(videos);
+      setvideoloading(false);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const generateQuiz = () => {
+    dispatch(generateQuizOnTopic(title, searchQuery));
+  };
+
+  const generateExample = () => {
+    dispatch(generateExamples(title, searchQuery));
+  };
+  // console.log("quizResults", quizResults);
+
+  const renderSidebar = () => {
+    return (
+      <div className=" w-full flex flex-col items-center text-center sm:rounded-2xl sm:border border-neutral-200 rounded-full dark:border-neutral-700 space-y-6 sm:space-y-7 px-0 sm:p-2 xl:p-2">
+        {/* <h2 className="text-2xl pt-2 text-left font-semibold">{searchQuery}</h2> */}
+        <ModuleGridLargeScreen
+          results={searchResults}
+          isLoading={isLoading}
+          setnext={(title: any) => {
+            onChangeTopic(title);
+            console.log(title);
+            // search();
+            // search(title);
+          }}
+        />
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    setQuizState({
+      ...quizState,
+      questions: quizResults,
+      answers: Array(quizResults.length).fill(""),
+    });
+  }, [generatedQuizLoading]);
+
+  const renderSection1 = () => {
+    return (
+      <div className="listingSection__wrap">
+        <div>
+          <h2 className="text-2xl font-semibold">{searchQuery}</h2>
+          <span className="block mt-2 text-neutral-500 dark:text-neutral-400">
+            {title}
+          </span>
+        </div>
+        <div className="w-14 border-b border-neutral-200 dark:border-neutral-700"></div>
+
+        <div>
+          <Tab.Group>
+            <Tab.List className="flex space-x-1 overflow-x-auto">
+              {categories.map((item) => (
+                <Tab key={item.name} as={Fragment}>
+                  {({ selected }) => (
+                    <button
+                      onClick={() => {
+                        if (item.name === "Video") {
+                          handleSearch();
+                        } else if (item.name === "Images") {
+                          search();
+                        } else if (item.name === "Quiz") {
+                          generateQuiz();
+                          settitle(title);
+                          setquizclicked(!quizclicked);
+                        } else if (item.name === "Examples") {
+                          generateExample();
+                        }
+                      }}
+                      className={`flex-shrink-0 block !leading-none font-medium px-5 py-2.5 text-sm sm:text-base sm:px-6 sm:py-3 capitalize rounded-full focus:outline-none ${
+                        selected
+                          ? "bg-secondary-900 text-secondary-50 flex flex-row items-center "
+                          : "text-neutral-500 flex flex-row  items-center dark:text-neutral-400 dark:hover:text-neutral-100 hover:text-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                      } `}
+                    >
+                      {item.icon}
+                      {item.name}
+                    </button>
+                  )}
+                </Tab>
+              ))}
+            </Tab.List>
+            <Tab.Panels>
+              <Tab.Panel className="">
+                <div className="flex flex-col flex-grow">
+                  <div className="space-y-5 mb-4">
+                    {/* <CategoryBadgeList categories={categories} /> */}
+                    <div>
+                      <div className="hidden sm:block sm:mt-2">
+                        <span className="text-neutral-500 dark:text-neutral-400 text-base ">
+                          {/* <p className="mt-2">{content}</p> */}
+                          {/* {ReactDom.render(
+                            <ReactMarkdown
+                              children={markdown}
+                              remarkPlugins={[remarkGfm]}
+                            />,
+                            document.body
+                          )} */}
+                          {loadingResults ? (
+                            <div className="w-full text-center m-auto">
+                              <Loading
+                                type="spinner"
+                                color="default"
+                                size="lg"
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              <ReactMarkdown
+                                remarkPlugins={[
+                                  [remarkGfm, { singleTilde: false }],
+                                ]}
+                                rehypePlugins={[rehypeRaw]}
+                              >
+                                {/* {textWithImage} */}
+                                {expandedResults}
+                              </ReactMarkdown>
+                              <p
+                                onClick={() => {
+                                  onChangeTopic(title);
+                                }}
+                                className="pt-4"
+                              >
+                                {expandedResults?.length ? (
+                                  <ArrowPathIcon className="h-7 w-7" />
+                                ) : (
+                                  ""
+                                )}
+                              </p>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Tab.Panel>
+              <Tab.Panel className="">
+                <div className="mt-8 grid grid-cols-1 gap-6 md:gap-7 sm:grid-cols-2"></div>
+
+                {videoloading ? (
+                  <div className="w-full text-center m-auto">
+                    <Loading type="spinner" color="default" size="lg" />
+                  </div>
+                ) : (
+                  <div className="mt-8 grid grid-cols-1 gap-6 md:gap-7 sm:grid-cols-2">
+                    {videos?.map((videos: any, index: any) => (
+                      <ExperiencesCard key={index} data={videos} />
+                    ))}
+                  </div>
+                )}
+              </Tab.Panel>
+              <Tab.Panel className="">
+                {searchloading ? (
+                  <div className="w-full text-center m-auto">
+                    <Loading type="spinner" color="default" size="lg" />
+                  </div>
+                ) : (
+                  <div className="mt-8 grid grid-cols-1 gap-6 md:gap-7 sm:grid-cols-2">
+                    {images?.map((items: any, index: any) => (
+                      <img
+                        src={items.src.landscape}
+                        width={400}
+                        height={400}
+                        className="rounded-2xl"
+                      />
+                    ))}
+                  </div>
+                )}
+                <div className="flex mt-11 justify-center items-center">
+                  <ButtonSecondary>Show me more</ButtonSecondary>
+                </div>
+              </Tab.Panel>
+              <Tab.Panel className="">
+                {quizResults.length < 1 ? (
+                  <div className="w-full text-center m-auto">
+                    <Loading type="spinner" color="default" size="lg" />
+                  </div>
+                ) : (
+                  <div className="mt-8 grid grid-cols-1 gap-6 md:gap-7 sm:grid-cols-1">
+                    {renderQuiz()}
+                  </div>
+                )}
+
+                <div className="flex mt-11 justify-center items-center">
+                  <ButtonSecondary
+                    onClick={() => {
+                      generateQuiz();
+                    }}
+                  >
+                    <ArrowPathIcon className="h-6 w-6" />
+                  </ButtonSecondary>
+                </div>
+              </Tab.Panel>
+              <Tab.Panel className="">
+                {/* {generatedExamplesLoading.length < 1 ? (
+                  <div className="w-full text-center m-auto">
+                    <Loading type="spinner" color="default" size="lg" />
+                  </div>
+                ) : ( */}
+                <div className="mt-8 grid grid-cols-1 gap-6 md:gap-7 sm:grid-cols-1">
+                  {generatedExamples}
+                </div>
+                {/* // )} */}
+
+                <div className="flex mt-11 justify-center items-center">
+                  <ButtonSecondary
+                    onClick={() => {
+                      // generateQuiz();
+                    }}
+                  >
+                    <ArrowPathIcon className="h-6 w-6" />
+                  </ButtonSecondary>
+                </div>
+              </Tab.Panel>
+            </Tab.Panels>
+          </Tab.Group>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className={`nc-AuthorPage `}>
+      <main className="container mt-12 mb-24 lg:mb-32 flex flex-col lg:flex-row">
+        <div className="block flex-grow mb-24 lg:mb-0">
+          <div className="lg:sticky lg:top-24">{renderSidebar()}</div>
+        </div>
+        <div className="w-full lg:w-3/5 xl:w-2/3 space-y-8 lg:space-y-10 lg:pl-10 flex-shrink-0">
+          {renderSection1()}
+        </div>
+      </main>
+      {/* <Confetti /> */}
+    </div>
+  );
+};
+
+export default AuthorPage;
