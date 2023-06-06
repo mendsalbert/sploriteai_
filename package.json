@@ -7,7 +7,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@apollo/client": "^3.7.14",
     "@auth0/nextjs-auth0": "^2.2.3",
     "@aws-sdk/client-textract": "^3.306.0",
     "@dqbd/tiktoken": "^1.0.2",
